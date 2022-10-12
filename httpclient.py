@@ -33,7 +33,16 @@ class HTTPResponse(object):
         self.body = body
 
 class HTTPClient(object):
-    #def get_host_port(self,url):
+    def get_host_port(self,url):
+        hostPort = ['127.0.0.1', 80]
+        host = urllib.parse.urlparse(url).hostname
+        port = urllib.parse.urlparse(url).port
+
+        # if x exists then assign as x, else keep it as localhost:80
+        hostPort[0] = host if host else hostPort[0]
+        hostPort[1] = port if port else hostPort[1]
+        
+        return hostPort
 
     def connect(self, host, port):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -41,13 +50,19 @@ class HTTPClient(object):
         return None
 
     def get_code(self, data):
-        return None
+        res = data.split(" ")
+        code = int(res[1])
+        return code
 
     def get_headers(self,data):
-        return None
+        res = data.split("\r\n\r\n")
+        header = res[0]
+        return header
 
     def get_body(self, data):
-        return None
+        res = data.split("\r\n\r\n")
+        body = res[1]
+        return body
     
     def sendall(self, data):
         self.socket.sendall(data.encode('utf-8'))
@@ -70,11 +85,45 @@ class HTTPClient(object):
     def GET(self, url, args=None):
         code = 500
         body = ""
+        hostPort = self.get_host_port(url)
+        host = hostPort[0]
+        port = hostPort[1]
+        self.connect(host, port)
+
+        path = urllib.parse.urlparse(url).path
+        request = f"GET {path if path else '/'} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"
+        self.sendall(request)
+        res = self.recvall(self.socket)
+        self.close()
+        code = self.get_code(res)
+        body = self.get_body(res)
+
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
         code = 500
         body = ""
+        hostPort = self.get_host_port(url)
+        host = hostPort[0]
+        port = hostPort[1]
+        self.connect(host, port)
+        path = urllib.parse.urlparse(url).path
+        params = urllib.parse.urlencode(args) if args else ""
+        contentLength = len(params)
+
+        request  = f"POST /{path} HTTP/1.1\r\nHost: {host}\r\nContent-type: application/x-www-form-urlencoded\r\nContent-length: {contentLength}\r\n\r\n{params}"
+        # request += f"{params}"
+        try:
+            self.sendall(request)
+
+            res = self.recvall(self.socket)
+        except Exception as e:
+            print(e)
+
+        self.close()
+        code = self.get_code(res)
+        body = self.get_body(res)
+
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
